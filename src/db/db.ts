@@ -83,6 +83,20 @@ export const updateMovieWatched = async (
   );
 };
 
+// Cập nhật thông tin phim
+export const updateMovie = async (
+  id: number,
+  title: string,
+  year: number | null,
+  rating: number | null
+): Promise<void> => {
+  const db = await getDatabase();
+  await db.runAsync(
+    `UPDATE movies SET title = ?, year = ?, rating = ? WHERE id = ?`,
+    [title, year, rating, id]
+  );
+};
+
 // Khởi tạo database (kết nối và tạo bảng)
 export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
   const db = await getDatabase();

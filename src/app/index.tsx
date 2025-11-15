@@ -2,7 +2,7 @@ import { Link } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { Text, View, ActivityIndicator, FlatList, Modal, TextInput, TouchableOpacity, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { initDatabase, getAllMovies, addMovie, updateMovieWatched } from "@/db/db";
+import { initDatabase, getAllMovies, addMovie, updateMovieWatched, updateMovie } from "@/db/db";
 import { Movie } from "@/types/Movie";
 
 export default function Page() {
@@ -11,6 +11,8 @@ export default function Page() {
   const [movies, setMovies] = useState<Movie[]>([]);
   const [loadingMovies, setLoadingMovies] = useState<boolean>(false);
   const [modalVisible, setModalVisible] = useState<boolean>(false);
+  const [editModalVisible, setEditModalVisible] = useState<boolean>(false);
+  const [editingMovie, setEditingMovie] = useState<Movie | null>(null);
 
   useEffect(() => {
     const initializeDB = async () => {
@@ -68,12 +70,29 @@ export default function Page() {
         movies={movies}
         loadingMovies={loadingMovies}
         onRefresh={refreshMovies}
+        onEditMovie={(movie) => {
+          setEditingMovie(movie);
+          setEditModalVisible(true);
+        }}
       />
       <AddMovieModal 
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
         onSuccess={async () => {
           setModalVisible(false);
+          await refreshMovies();
+        }}
+      />
+      <EditMovieModal
+        visible={editModalVisible}
+        movie={editingMovie}
+        onClose={() => {
+          setEditModalVisible(false);
+          setEditingMovie(null);
+        }}
+        onSuccess={async () => {
+          setEditModalVisible(false);
+          setEditingMovie(null);
           await refreshMovies();
         }}
       />
@@ -87,13 +106,15 @@ function Content({
   errorMessage, 
   movies, 
   loadingMovies,
-  onRefresh
+  onRefresh,
+  onEditMovie
 }: { 
   dbStatus: "loading" | "success" | "error"; 
   errorMessage: string;
   movies: Movie[];
   loadingMovies: boolean;
   onRefresh: () => void;
+  onEditMovie: (movie: Movie) => void;
 }) {
   if (dbStatus === "loading") {
     return (
@@ -140,7 +161,7 @@ function Content({
         <FlatList
           data={movies}
           keyExtractor={(item) => item.id.toString()}
-          renderItem={({ item }) => <MovieItem movie={item} onToggle={onRefresh} />}
+          renderItem={({ item }) => <MovieItem movie={item} onToggle={onRefresh} onEdit={onEditMovie} />}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16, paddingTop: 8 }}
           style={{ flex: 1 }}
           showsVerticalScrollIndicator={true}
@@ -150,7 +171,7 @@ function Content({
   );
 }
 
-function MovieItem({ movie, onToggle }: { movie: Movie; onToggle: () => void }) {
+function MovieItem({ movie, onToggle, onEdit }: { movie: Movie; onToggle: () => void; onEdit: (movie: Movie) => void }) {
   const isWatched = movie.watched === 1;
 
   const handleToggle = async () => {
@@ -164,10 +185,13 @@ function MovieItem({ movie, onToggle }: { movie: Movie; onToggle: () => void }) 
     }
   };
 
+  const handleEdit = (e: any) => {
+    e.stopPropagation();
+    onEdit(movie);
+  };
+
   return (
-    <TouchableOpacity
-      onPress={handleToggle}
-      activeOpacity={0.7}
+    <View
       style={{
         backgroundColor: isWatched ? '#f3f4f6' : '#ffffff',
         borderRadius: 8,
@@ -178,38 +202,57 @@ function MovieItem({ movie, onToggle }: { movie: Movie; onToggle: () => void }) 
         opacity: isWatched ? 0.7 : 1,
       }}
     >
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-          {isWatched && (
-            <Text style={{ fontSize: 20, marginRight: 8, color: '#10b981' }}>✓</Text>
+      <TouchableOpacity
+        onPress={handleToggle}
+        activeOpacity={0.7}
+      >
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, paddingRight: 60 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+            {isWatched && (
+              <Text style={{ fontSize: 20, marginRight: 8, color: '#10b981' }}>✓</Text>
+            )}
+            <Text
+              style={{
+                fontSize: 18,
+                fontWeight: '600',
+                flex: 1,
+                textDecorationLine: isWatched ? 'line-through' : 'none',
+                color: isWatched ? '#6b7280' : '#111827',
+              }}
+            >
+              {movie.title}
+            </Text>
+          </View>
+          {movie.year && (
+            <Text style={{ color: '#6b7280', marginLeft: 8 }}>({movie.year})</Text>
           )}
-          <Text
-            style={{
-              fontSize: 18,
-              fontWeight: '600',
-              flex: 1,
-              textDecorationLine: isWatched ? 'line-through' : 'none',
-              color: isWatched ? '#6b7280' : '#111827',
-            }}
-          >
-            {movie.title}
-          </Text>
         </View>
-        {movie.year && (
-          <Text style={{ color: '#6b7280', marginLeft: 8 }}>({movie.year})</Text>
-        )}
-      </View>
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
-        <Text style={{ fontSize: 14, color: isWatched ? '#6b7280' : '#4b5563' }}>
-          {isWatched ? "✓ Đã xem" : "○ Chưa xem"}
-        </Text>
-        {movie.rating !== null && movie.rating !== undefined && (
-          <Text style={{ fontSize: 14, color: isWatched ? '#6b7280' : '#4b5563', marginLeft: 16 }}>
-            ⭐ {movie.rating}/5
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+          <Text style={{ fontSize: 14, color: isWatched ? '#6b7280' : '#4b5563' }}>
+            {isWatched ? "✓ Đã xem" : "○ Chưa xem"}
           </Text>
-        )}
-      </View>
-    </TouchableOpacity>
+          {movie.rating !== null && movie.rating !== undefined && (
+            <Text style={{ fontSize: 14, color: isWatched ? '#6b7280' : '#4b5563', marginLeft: 16 }}>
+              ⭐ {movie.rating}/5
+            </Text>
+          )}
+        </View>
+      </TouchableOpacity>
+      <TouchableOpacity
+        onPress={handleEdit}
+        style={{
+          position: 'absolute',
+          top: 12,
+          right: 12,
+          paddingHorizontal: 12,
+          paddingVertical: 6,
+          borderRadius: 6,
+          backgroundColor: '#3b82f6',
+        }}
+      >
+        <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '600' }}>Sửa</Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 
@@ -445,6 +488,264 @@ function AddMovieModal({
               ) : (
                 <Text style={{ fontSize: 16, fontWeight: '600', color: '#ffffff' }}>
                   Thêm
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function EditMovieModal({ 
+  visible, 
+  movie,
+  onClose, 
+  onSuccess 
+}: { 
+  visible: boolean;
+  movie: Movie | null;
+  onClose: () => void; 
+  onSuccess: () => void;
+}) {
+  const [title, setTitle] = useState<string>("");
+  const [year, setYear] = useState<string>("");
+  const [rating, setRating] = useState<string>("");
+  const [errors, setErrors] = useState<{ title?: string; year?: string; rating?: string }>({});
+  const [submitting, setSubmitting] = useState<boolean>(false);
+
+  // Pre-fill form khi movie thay đổi
+  useEffect(() => {
+    if (movie) {
+      setTitle(movie.title || "");
+      setYear(movie.year ? movie.year.toString() : "");
+      setRating(movie.rating !== null && movie.rating !== undefined ? movie.rating.toString() : "");
+      setErrors({});
+    }
+  }, [movie]);
+
+  const validate = (): boolean => {
+    const newErrors: { title?: string; year?: string; rating?: string } = {};
+
+    // Validate title (bắt buộc)
+    if (!title.trim()) {
+      newErrors.title = "Tên phim không được để trống";
+    }
+
+    // Validate year (nếu có nhập)
+    if (year.trim()) {
+      const yearNum = parseInt(year.trim());
+      const currentYear = new Date().getFullYear();
+      
+      if (isNaN(yearNum)) {
+        newErrors.year = "Năm phải là số";
+      } else if (yearNum < 1900) {
+        newErrors.year = "Năm phải >= 1900";
+      } else if (yearNum > currentYear) {
+        newErrors.year = `Năm phải <= ${currentYear}`;
+      }
+    }
+
+    // Validate rating (nếu có nhập)
+    if (rating.trim()) {
+      const ratingNum = parseInt(rating.trim());
+      if (isNaN(ratingNum)) {
+        newErrors.rating = "Đánh giá phải là số";
+      } else if (ratingNum < 1 || ratingNum > 5) {
+        newErrors.rating = "Đánh giá phải từ 1 đến 5";
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async () => {
+    if (!movie || !validate()) {
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const yearNum = year.trim() ? parseInt(year.trim()) : null;
+      const ratingNum = rating.trim() ? parseInt(rating.trim()) : null;
+      
+      await updateMovie(movie.id, title.trim(), yearNum, ratingNum);
+      // Reset form
+      setTitle("");
+      setYear("");
+      setRating("");
+      setErrors({});
+      onSuccess();
+    } catch (error) {
+      console.error("Error updating movie:", error);
+      Alert.alert("Lỗi", "Không thể cập nhật phim. Vui lòng thử lại.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleClose = () => {
+    setTitle("");
+    setYear("");
+    setRating("");
+    setErrors({});
+    onClose();
+  };
+
+  if (!movie) {
+    return null;
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={handleClose}
+    >
+      <View style={{ 
+        flex: 1, 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        backgroundColor: 'rgba(0, 0, 0, 0.5)' 
+      }}>
+        <View style={{ 
+          backgroundColor: '#ffffff', 
+          borderRadius: 12, 
+          padding: 24, 
+          width: '90%', 
+          maxWidth: 400 
+        }}>
+          <Text style={{ fontSize: 24, fontWeight: 'bold', marginBottom: 20 }}>
+            Sửa thông tin phim
+          </Text>
+
+          {/* Title Input */}
+          <View style={{ marginBottom: 16 }}>
+            <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8 }}>
+              Tên phim <Text style={{ color: '#ef4444' }}>*</Text>
+            </Text>
+            <TextInput
+              style={{
+                borderWidth: 1,
+                borderColor: errors.title ? '#ef4444' : '#d1d5db',
+                borderRadius: 8,
+                padding: 12,
+                fontSize: 16,
+              }}
+              placeholder="Nhập tên phim"
+              value={title}
+              onChangeText={(text) => {
+                setTitle(text);
+                if (errors.title) {
+                  setErrors({ ...errors, title: undefined });
+                }
+              }}
+            />
+            {errors.title && (
+              <Text style={{ color: '#ef4444', fontSize: 14, marginTop: 4 }}>
+                {errors.title}
+              </Text>
+            )}
+          </View>
+
+          {/* Year Input */}
+          <View style={{ marginBottom: 16 }}>
+            <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8 }}>
+              Năm phát hành
+            </Text>
+            <TextInput
+              style={{
+                borderWidth: 1,
+                borderColor: errors.year ? '#ef4444' : '#d1d5db',
+                borderRadius: 8,
+                padding: 12,
+                fontSize: 16,
+              }}
+              placeholder="Ví dụ: 2020"
+              value={year}
+              onChangeText={(text) => {
+                setYear(text);
+                if (errors.year) {
+                  setErrors({ ...errors, year: undefined });
+                }
+              }}
+              keyboardType="numeric"
+            />
+            {errors.year && (
+              <Text style={{ color: '#ef4444', fontSize: 14, marginTop: 4 }}>
+                {errors.year}
+              </Text>
+            )}
+          </View>
+
+          {/* Rating Input */}
+          <View style={{ marginBottom: 24 }}>
+            <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8 }}>
+              Đánh giá (1-5)
+            </Text>
+            <TextInput
+              style={{
+                borderWidth: 1,
+                borderColor: errors.rating ? '#ef4444' : '#d1d5db',
+                borderRadius: 8,
+                padding: 12,
+                fontSize: 16,
+              }}
+              placeholder="Từ 1 đến 5"
+              value={rating}
+              onChangeText={(text) => {
+                setRating(text);
+                if (errors.rating) {
+                  setErrors({ ...errors, rating: undefined });
+                }
+              }}
+              keyboardType="numeric"
+            />
+            {errors.rating && (
+              <Text style={{ color: '#ef4444', fontSize: 14, marginTop: 4 }}>
+                {errors.rating}
+              </Text>
+            )}
+          </View>
+
+          {/* Buttons */}
+          <View style={{ flexDirection: 'row' }}>
+            <TouchableOpacity
+              onPress={handleClose}
+              style={{
+                flex: 1,
+                padding: 12,
+                borderRadius: 8,
+                backgroundColor: '#e5e7eb',
+                alignItems: 'center',
+                marginRight: 6,
+              }}
+              disabled={submitting}
+            >
+              <Text style={{ fontSize: 16, fontWeight: '600', color: '#374151' }}>
+                Hủy
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleSubmit}
+              style={{
+                flex: 1,
+                padding: 12,
+                borderRadius: 8,
+                backgroundColor: '#3b82f6',
+                alignItems: 'center',
+                marginLeft: 6,
+              }}
+              disabled={submitting}
+            >
+              {submitting ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Text style={{ fontSize: 16, fontWeight: '600', color: '#ffffff' }}>
+                  Lưu
                 </Text>
               )}
             </TouchableOpacity>
