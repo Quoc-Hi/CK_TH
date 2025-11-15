@@ -1,137 +1,68 @@
 import { Link } from "expo-router";
-import React, { useEffect, useState, useMemo, useCallback } from "react";
-import { Text, View, ActivityIndicator, FlatList, Modal, TextInput, TouchableOpacity, Alert } from "react-native";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
+import { Text, View, ActivityIndicator, FlatList, Modal, TextInput, TouchableOpacity, Alert, RefreshControl } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { initDatabase, getAllMovies, addMovie, updateMovieWatched, updateMovie, deleteMovie, importMovies } from "@/db/db";
+import { useMovies } from "@/hooks/useMovies";
 import { Movie } from "@/types/Movie";
 
 export default function Page() {
-  const [dbStatus, setDbStatus] = useState<"loading" | "success" | "error">("loading");
-  const [errorMessage, setErrorMessage] = useState<string>("");
-  const [movies, setMovies] = useState<Movie[]>([]);
-  const [loadingMovies, setLoadingMovies] = useState<boolean>(false);
+  const {
+    dbStatus,
+    errorMessage,
+    movies,
+    loadingMovies,
+    importing,
+    importError,
+    sortBy,
+    loadMovies,
+    insertMovie,
+    updateMovieData,
+    toggleWatched,
+    removeMovie,
+    importMoviesFromAPI,
+    setSortBy,
+    sortedMovies,
+  } = useMovies();
+
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [editModalVisible, setEditModalVisible] = useState<boolean>(false);
   const [editingMovie, setEditingMovie] = useState<Movie | null>(null);
-  const [importing, setImporting] = useState<boolean>(false);
-  const [importError, setImportError] = useState<string>("");
 
-  useEffect(() => {
-    const initializeDB = async () => {
-      try {
-        await initDatabase();
-        setDbStatus("success");
-        console.log("Database initialized successfully");
+  const handleToggleWatched = useCallback(async (movie: Movie) => {
+    try {
+      const newWatched = movie.watched === 1 ? 0 : 1;
+      await toggleWatched(movie.id, newWatched);
       } catch (error) {
-        console.error("Database initialization error:", error);
-        setDbStatus("error");
-        setErrorMessage(error instanceof Error ? error.message : "Unknown error");
-      }
-    };
+      Alert.alert("Lỗi", "Không thể cập nhật trạng thái. Vui lòng thử lại.");
+    }
+  }, [toggleWatched]);
 
-    initializeDB();
-  }, []);
-
-  useEffect(() => {
-    const loadMovies = async () => {
-      if (dbStatus === "success") {
-        try {
-          setLoadingMovies(true);
-          const moviesData = await getAllMovies();
-          console.log("Loaded movies:", moviesData.length, moviesData);
-          setMovies(moviesData);
-        } catch (error) {
-          console.error("Error loading movies:", error);
-        } finally {
-          setLoadingMovies(false);
+  const handleDeleteMovie = useCallback(async (movie: Movie) => {
+    Alert.alert(
+      "Xác nhận xóa",
+      `Bạn có chắc chắn muốn xóa phim "${movie.title}"?`,
+      [
+        { text: "Hủy", style: "cancel" },
+        {
+          text: "Xóa",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await removeMovie(movie.id);
+            } catch (error) {
+              Alert.alert("Lỗi", "Không thể xóa phim. Vui lòng thử lại.");
+            }
+          }
         }
-      }
-    };
-
-    loadMovies();
-  }, [dbStatus]);
-
-  const refreshMovies = async () => {
-    try {
-      setLoadingMovies(true);
-      const moviesData = await getAllMovies();
-      setMovies(moviesData);
-    } catch (error) {
-      console.error("Error loading movies:", error);
-    } finally {
-      setLoadingMovies(false);
-    }
-  };
-
-  // Fetch movies từ API
-  const fetchMoviesFromAPI = async (): Promise<Array<{ title: string; year: number | null; rating: number | null }>> => {
-    try {
-      // Sử dụng một mock API endpoint hoặc API thật
-      // Ở đây tôi sẽ sử dụng một mock endpoint công khai
-      const response = await fetch('https://jsonplaceholder.typicode.com/posts?_limit=5');
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch movies from API');
-      }
-
-      // Vì đây là mock API, tôi sẽ tạo dữ liệu mẫu dựa trên response
-      // Trong thực tế, bạn sẽ map từ API response thật
-      const data = await response.json();
-      
-      // Tạo mock movies từ API response
-      const mockMovies = [
-        { title: "The Shawshank Redemption", year: 1994, rating: 5 },
-        { title: "The Godfather", year: 1972, rating: 5 },
-        { title: "The Dark Knight", year: 2008, rating: 5 },
-        { title: "Pulp Fiction", year: 1994, rating: 4 },
-        { title: "Forrest Gump", year: 1994, rating: 4 },
-      ];
-
-      // Map dữ liệu: title → title, year → year, rating → rating
-      return mockMovies.map(movie => ({
-        title: movie.title,
-        year: movie.year,
-        rating: movie.rating,
-      }));
-    } catch (error) {
-      console.error("Error fetching from API:", error);
-      throw error;
-    }
-  };
-
-  const handleImportMovies = async () => {
-    setImporting(true);
-    setImportError("");
-    
-    try {
-      const apiMovies = await fetchMoviesFromAPI();
-      const result = await importMovies(apiMovies);
-      
-      await refreshMovies();
-      
-      // Clear error nếu thành công
-      setImportError("");
-      
-      Alert.alert(
-        "Import thành công",
-        `Đã thêm ${result.added} phim mới. ${result.skipped > 0 ? `Bỏ qua ${result.skipped} phim trùng lặp.` : ''}`,
-        [{ text: "OK" }]
-      );
-    } catch (error) {
-      console.error("Error importing movies:", error);
-      const errorMessage = error instanceof Error ? error.message : "Không thể import phim từ API";
-      setImportError(errorMessage);
-      Alert.alert("Lỗi", errorMessage);
-    } finally {
-      setImporting(false);
-    }
-  };
+      ]
+    );
+  }, [removeMovie]);
 
   return (
     <View className="flex flex-1">
       <Header 
         onAddPress={() => setModalVisible(true)}
-        onImportPress={handleImportMovies}
+        onImportPress={importMoviesFromAPI}
         importing={importing}
       />
       <Content 
@@ -139,20 +70,25 @@ export default function Page() {
         errorMessage={errorMessage} 
         movies={movies}
         loadingMovies={loadingMovies}
-        onRefresh={refreshMovies}
+        onRefresh={loadMovies}
         onEditMovie={(movie) => {
           setEditingMovie(movie);
           setEditModalVisible(true);
         }}
         importError={importError}
+        sortBy={sortBy}
+        onSortChange={setSortBy}
+        onToggleWatched={handleToggleWatched}
+        onDeleteMovie={handleDeleteMovie}
+        sortedMovies={sortedMovies}
       />
       <AddMovieModal 
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
         onSuccess={async () => {
           setModalVisible(false);
-          await refreshMovies();
         }}
+        onAddMovie={insertMovie}
       />
       <EditMovieModal
         visible={editModalVisible}
@@ -164,8 +100,8 @@ export default function Page() {
         onSuccess={async () => {
           setEditModalVisible(false);
           setEditingMovie(null);
-          await refreshMovies();
         }}
+        onUpdateMovie={updateMovieData}
       />
       <Footer />
     </View>
@@ -179,7 +115,12 @@ function Content({
   loadingMovies,
   onRefresh,
   onEditMovie,
-  importError
+  importError,
+  sortBy,
+  onSortChange,
+  onToggleWatched,
+  onDeleteMovie,
+  sortedMovies
 }: { 
   dbStatus: "loading" | "success" | "error"; 
   errorMessage: string;
@@ -188,11 +129,17 @@ function Content({
   onRefresh: () => void;
   onEditMovie: (movie: Movie) => void;
   importError: string;
+  sortBy: "created_at" | "year" | "title";
+  onSortChange: (sort: "created_at" | "year" | "title") => void;
+  onToggleWatched: (movie: Movie) => void;
+  onDeleteMovie: (movie: Movie) => void;
+  sortedMovies: (movies: Movie[]) => Movie[];
 }) {
   const [searchText, setSearchText] = useState<string>("");
   const [watchedFilter, setWatchedFilter] = useState<"all" | "watched" | "unwatched">("all");
+  const [refreshing, setRefreshing] = useState<boolean>(false);
 
-  // Filter movies với useMemo để tối ưu performance
+  // Filter và sort movies với useMemo để tối ưu performance
   const filteredMovies = useMemo(() => {
     let filtered = movies;
 
@@ -211,13 +158,26 @@ function Content({
       );
     }
 
-    return filtered;
-  }, [movies, searchText, watchedFilter]);
+    // Sort movies
+    return sortedMovies(filtered);
+  }, [movies, searchText, watchedFilter, sortedMovies]);
+
+  // Pull to refresh handler
+  const onRefreshHandler = useCallback(async () => {
+    setRefreshing(true);
+    await onRefresh();
+    setRefreshing(false);
+  }, [onRefresh]);
 
   // useCallback cho renderItem để tối ưu FlatList
   const renderItem = useCallback(({ item }: { item: Movie }) => (
-    <MovieItem movie={item} onToggle={onRefresh} onEdit={onEditMovie} onDelete={onRefresh} />
-  ), [onRefresh, onEditMovie]);
+    <MovieItem 
+      movie={item} 
+      onToggle={() => onToggleWatched(item)} 
+      onEdit={onEditMovie} 
+      onDelete={() => onDeleteMovie(item)} 
+    />
+  ), [onToggleWatched, onEditMovie, onDeleteMovie]);
 
   // useCallback cho keyExtractor
   const keyExtractor = useCallback((item: Movie) => item.id.toString(), []);
@@ -338,13 +298,67 @@ function Content({
             </Text>
           </TouchableOpacity>
         </View>
+
+        {/* Sort Buttons */}
+        <View style={{ flexDirection: 'row', marginBottom: 8 }}>
+          <Text style={{ fontSize: 14, fontWeight: '600', color: '#374151', marginRight: 8, alignSelf: 'center' }}>
+            Sắp xếp:
+          </Text>
+          <TouchableOpacity
+            onPress={() => onSortChange("created_at")}
+            style={{
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              borderRadius: 6,
+              backgroundColor: sortBy === "created_at" ? '#3b82f6' : '#e5e7eb',
+              marginRight: 6,
+            }}
+          >
+            <Text style={{ color: sortBy === "created_at" ? '#ffffff' : '#374151', fontSize: 12, fontWeight: '600' }}>
+              Mới nhất
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => onSortChange("year")}
+            style={{
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              borderRadius: 6,
+              backgroundColor: sortBy === "year" ? '#3b82f6' : '#e5e7eb',
+              marginRight: 6,
+            }}
+          >
+            <Text style={{ color: sortBy === "year" ? '#ffffff' : '#374151', fontSize: 12, fontWeight: '600' }}>
+              Năm
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => onSortChange("title")}
+            style={{
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              borderRadius: 6,
+              backgroundColor: sortBy === "title" ? '#3b82f6' : '#e5e7eb',
+            }}
+          >
+            <Text style={{ color: sortBy === "title" ? '#ffffff' : '#374151', fontSize: 12, fontWeight: '600' }}>
+              Tên
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
       {filteredMovies.length === 0 ? (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16 }}>
-          <Text style={{ color: '#6b7280', fontSize: 18 }}>
+          <Text style={{ fontSize: 48, marginBottom: 16 }}>🎬</Text>
+          <Text style={{ color: '#6b7280', fontSize: 18, fontWeight: '600', marginBottom: 8, textAlign: 'center' }}>
             {searchText.trim() || watchedFilter !== "all" 
-              ? "Không tìm thấy phim nào phù hợp." 
-              : "Chưa có phim nào trong danh sách."}
+              ? "Không tìm thấy phim nào phù hợp" 
+              : "Chưa có phim nào trong danh sách"}
+          </Text>
+          <Text style={{ color: '#9ca3af', fontSize: 14, textAlign: 'center' }}>
+            {searchText.trim() || watchedFilter !== "all"
+              ? "Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm"
+              : "Nhấn nút + để thêm phim mới"}
           </Text>
         </View>
       ) : (
@@ -355,6 +369,13 @@ function Content({
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16, paddingTop: 8 }}
           style={{ flex: 1 }}
           showsVerticalScrollIndicator={true}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefreshHandler}
+              colors={['#3b82f6']}
+            />
+          }
         />
       )}
     </View>
@@ -364,15 +385,9 @@ function Content({
 function MovieItem({ movie, onToggle, onEdit, onDelete }: { movie: Movie; onToggle: () => void; onEdit: (movie: Movie) => void; onDelete: () => void }) {
   const isWatched = movie.watched === 1;
 
-  const handleToggle = async () => {
-    try {
-      const newWatched = isWatched ? 0 : 1;
-      await updateMovieWatched(movie.id, newWatched);
-      onToggle();
-    } catch (error) {
-      console.error("Error updating watched state:", error);
-      Alert.alert("Lỗi", "Không thể cập nhật trạng thái. Vui lòng thử lại.");
-    }
+  const handleToggle = (e: any) => {
+    e.stopPropagation();
+    onToggle();
   };
 
   const handleEdit = (e: any) => {
@@ -382,29 +397,7 @@ function MovieItem({ movie, onToggle, onEdit, onDelete }: { movie: Movie; onTogg
 
   const handleDelete = (e: any) => {
     e.stopPropagation();
-    Alert.alert(
-      "Xác nhận xóa",
-      `Bạn có chắc chắn muốn xóa phim "${movie.title}"?`,
-      [
-        {
-          text: "Hủy",
-          style: "cancel"
-        },
-        {
-          text: "Xóa",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteMovie(movie.id);
-              onDelete();
-            } catch (error) {
-              console.error("Error deleting movie:", error);
-              Alert.alert("Lỗi", "Không thể xóa phim. Vui lòng thử lại.");
-            }
-          }
-        }
-      ]
-    );
+    onDelete();
   };
 
   return (
@@ -487,11 +480,13 @@ function MovieItem({ movie, onToggle, onEdit, onDelete }: { movie: Movie; onTogg
 function AddMovieModal({ 
   visible, 
   onClose, 
-  onSuccess 
+  onSuccess,
+  onAddMovie
 }: { 
   visible: boolean; 
   onClose: () => void; 
   onSuccess: () => void;
+  onAddMovie: (title: string, year: number | null, rating: number | null) => Promise<void>;
 }) {
   const [title, setTitle] = useState<string>("");
   const [year, setYear] = useState<string>("");
@@ -545,7 +540,7 @@ function AddMovieModal({
       const yearNum = year.trim() ? parseInt(year.trim()) : null;
       const ratingNum = rating.trim() ? parseInt(rating.trim()) : null;
       
-      await addMovie(title.trim(), yearNum, ratingNum);
+      await onAddMovie(title.trim(), yearNum, ratingNum);
       // Reset form
       setTitle("");
       setYear("");
@@ -730,12 +725,14 @@ function EditMovieModal({
   visible, 
   movie,
   onClose, 
-  onSuccess 
+  onSuccess,
+  onUpdateMovie
 }: { 
   visible: boolean;
   movie: Movie | null;
   onClose: () => void; 
   onSuccess: () => void;
+  onUpdateMovie: (id: number, title: string, year: number | null, rating: number | null) => Promise<void>;
 }) {
   const [title, setTitle] = useState<string>("");
   const [year, setYear] = useState<string>("");
@@ -799,7 +796,7 @@ function EditMovieModal({
       const yearNum = year.trim() ? parseInt(year.trim()) : null;
       const ratingNum = rating.trim() ? parseInt(rating.trim()) : null;
       
-      await updateMovie(movie.id, title.trim(), yearNum, ratingNum);
+      await onUpdateMovie(movie.id, title.trim(), yearNum, ratingNum);
       // Reset form
       setTitle("");
       setYear("");
