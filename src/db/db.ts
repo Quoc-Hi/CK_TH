@@ -47,6 +47,15 @@ export const isTableEmpty = async (db: SQLite.SQLiteDatabase): Promise<boolean> 
   return result ? result.count === 0 : true;
 };
 
+// Lấy tất cả phim từ database
+export const getAllMovies = async (): Promise<Movie[]> => {
+  const db = await getDatabase();
+  const movies = await db.getAllAsync<Movie>(
+    `SELECT id, title, year, watched, rating, created_at FROM movies ORDER BY created_at DESC`
+  );
+  return movies;
+};
+
 // Khởi tạo database (kết nối và tạo bảng)
 export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
   const db = await getDatabase();
