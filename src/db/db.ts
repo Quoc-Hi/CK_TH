@@ -21,10 +21,44 @@ export const initTable = async (db: SQLite.SQLiteDatabase): Promise<void> => {
   `);
 };
 
+// Seed dữ liệu mẫu
+export const seedSampleData = async (db: SQLite.SQLiteDatabase): Promise<void> => {
+  const currentTime = Date.now();
+  
+  const sampleMovies = [
+    { title: "Inception", year: 2010, watched: 0, rating: null, created_at: currentTime },
+    { title: "Interstellar", year: 2014, watched: 0, rating: null, created_at: currentTime },
+    { title: "The Matrix", year: 1999, watched: 0, rating: null, created_at: currentTime },
+  ];
+
+  for (const movie of sampleMovies) {
+    await db.runAsync(
+      `INSERT INTO movies (title, year, watched, rating, created_at) VALUES (?, ?, ?, ?, ?)`,
+      [movie.title, movie.year, movie.watched, movie.rating, movie.created_at]
+    );
+  }
+};
+
+// Kiểm tra xem bảng có dữ liệu chưa
+export const isTableEmpty = async (db: SQLite.SQLiteDatabase): Promise<boolean> => {
+  const result = await db.getFirstAsync<{ count: number }>(
+    `SELECT COUNT(*) as count FROM movies`
+  );
+  return result ? result.count === 0 : true;
+};
+
 // Khởi tạo database (kết nối và tạo bảng)
 export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
   const db = await getDatabase();
   await initTable(db);
+  
+  // Seed dữ liệu mẫu nếu bảng rỗng (lần đầu chạy)
+  const isEmpty = await isTableEmpty(db);
+  if (isEmpty) {
+    await seedSampleData(db);
+    console.log("Sample movies seeded successfully");
+  }
+  
   return db;
 };
 
