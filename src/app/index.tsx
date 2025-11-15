@@ -1,5 +1,5 @@
 import { Link } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { Text, View, ActivityIndicator, FlatList, Modal, TextInput, TouchableOpacity, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { initDatabase, getAllMovies, addMovie, updateMovieWatched, updateMovie, deleteMovie } from "@/db/db";
@@ -116,6 +116,39 @@ function Content({
   onRefresh: () => void;
   onEditMovie: (movie: Movie) => void;
 }) {
+  const [searchText, setSearchText] = useState<string>("");
+  const [watchedFilter, setWatchedFilter] = useState<"all" | "watched" | "unwatched">("all");
+
+  // Filter movies với useMemo để tối ưu performance
+  const filteredMovies = useMemo(() => {
+    let filtered = movies;
+
+    // Filter theo watched status
+    if (watchedFilter === "watched") {
+      filtered = filtered.filter(movie => movie.watched === 1);
+    } else if (watchedFilter === "unwatched") {
+      filtered = filtered.filter(movie => movie.watched === 0);
+    }
+
+    // Filter theo search text
+    if (searchText.trim()) {
+      const searchLower = searchText.toLowerCase().trim();
+      filtered = filtered.filter(movie =>
+        movie.title.toLowerCase().includes(searchLower)
+      );
+    }
+
+    return filtered;
+  }, [movies, searchText, watchedFilter]);
+
+  // useCallback cho renderItem để tối ưu FlatList
+  const renderItem = useCallback(({ item }: { item: Movie }) => (
+    <MovieItem movie={item} onToggle={onRefresh} onEdit={onEditMovie} onDelete={onRefresh} />
+  ), [onRefresh, onEditMovie]);
+
+  // useCallback cho keyExtractor
+  const keyExtractor = useCallback((item: Movie) => item.id.toString(), []);
+
   if (dbStatus === "loading") {
     return (
       <View className="flex-1 justify-center items-center">
@@ -152,16 +185,84 @@ function Content({
         >
           Danh sách phim
         </Text>
+        
+        {/* Search Input */}
+        <View style={{ marginBottom: 12 }}>
+          <TextInput
+            style={{
+              borderWidth: 1,
+              borderColor: '#d1d5db',
+              borderRadius: 8,
+              padding: 12,
+              fontSize: 16,
+              backgroundColor: '#ffffff',
+            }}
+            placeholder="Tìm kiếm theo tên phim..."
+            value={searchText}
+            onChangeText={setSearchText}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+        </View>
+
+        {/* Filter Buttons */}
+        <View style={{ flexDirection: 'row', marginBottom: 8 }}>
+          <TouchableOpacity
+            onPress={() => setWatchedFilter("all")}
+            style={{
+              paddingHorizontal: 16,
+              paddingVertical: 8,
+              borderRadius: 6,
+              backgroundColor: watchedFilter === "all" ? '#3b82f6' : '#e5e7eb',
+              marginRight: 8,
+            }}
+          >
+            <Text style={{ color: watchedFilter === "all" ? '#ffffff' : '#374151', fontSize: 14, fontWeight: '600' }}>
+              Tất cả
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setWatchedFilter("watched")}
+            style={{
+              paddingHorizontal: 16,
+              paddingVertical: 8,
+              borderRadius: 6,
+              backgroundColor: watchedFilter === "watched" ? '#3b82f6' : '#e5e7eb',
+              marginRight: 8,
+            }}
+          >
+            <Text style={{ color: watchedFilter === "watched" ? '#ffffff' : '#374151', fontSize: 14, fontWeight: '600' }}>
+              Đã xem
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setWatchedFilter("unwatched")}
+            style={{
+              paddingHorizontal: 16,
+              paddingVertical: 8,
+              borderRadius: 6,
+              backgroundColor: watchedFilter === "unwatched" ? '#3b82f6' : '#e5e7eb',
+            }}
+          >
+            <Text style={{ color: watchedFilter === "unwatched" ? '#ffffff' : '#374151', fontSize: 14, fontWeight: '600' }}>
+              Chưa xem
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
-      {movies.length === 0 ? (
+      {filteredMovies.length === 0 ? (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16 }}>
-          <Text style={{ color: '#6b7280', fontSize: 18 }}>Chưa có phim nào trong danh sách.</Text>
+          <Text style={{ color: '#6b7280', fontSize: 18 }}>
+            {searchText.trim() || watchedFilter !== "all" 
+              ? "Không tìm thấy phim nào phù hợp." 
+              : "Chưa có phim nào trong danh sách."}
+          </Text>
         </View>
       ) : (
         <FlatList
-          data={movies}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={({ item }) => <MovieItem movie={item} onToggle={onRefresh} onEdit={onEditMovie} onDelete={onRefresh} />}
+          data={filteredMovies}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16, paddingTop: 8 }}
           style={{ flex: 1 }}
           showsVerticalScrollIndicator={true}
