@@ -2,7 +2,7 @@ import { Link } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { Text, View, ActivityIndicator, FlatList, Modal, TextInput, TouchableOpacity, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { initDatabase, getAllMovies, addMovie, updateMovieWatched, updateMovie } from "@/db/db";
+import { initDatabase, getAllMovies, addMovie, updateMovieWatched, updateMovie, deleteMovie } from "@/db/db";
 import { Movie } from "@/types/Movie";
 
 export default function Page() {
@@ -161,7 +161,7 @@ function Content({
         <FlatList
           data={movies}
           keyExtractor={(item) => item.id.toString()}
-          renderItem={({ item }) => <MovieItem movie={item} onToggle={onRefresh} onEdit={onEditMovie} />}
+          renderItem={({ item }) => <MovieItem movie={item} onToggle={onRefresh} onEdit={onEditMovie} onDelete={onRefresh} />}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16, paddingTop: 8 }}
           style={{ flex: 1 }}
           showsVerticalScrollIndicator={true}
@@ -171,7 +171,7 @@ function Content({
   );
 }
 
-function MovieItem({ movie, onToggle, onEdit }: { movie: Movie; onToggle: () => void; onEdit: (movie: Movie) => void }) {
+function MovieItem({ movie, onToggle, onEdit, onDelete }: { movie: Movie; onToggle: () => void; onEdit: (movie: Movie) => void; onDelete: () => void }) {
   const isWatched = movie.watched === 1;
 
   const handleToggle = async () => {
@@ -190,6 +190,33 @@ function MovieItem({ movie, onToggle, onEdit }: { movie: Movie; onToggle: () => 
     onEdit(movie);
   };
 
+  const handleDelete = (e: any) => {
+    e.stopPropagation();
+    Alert.alert(
+      "Xác nhận xóa",
+      `Bạn có chắc chắn muốn xóa phim "${movie.title}"?`,
+      [
+        {
+          text: "Hủy",
+          style: "cancel"
+        },
+        {
+          text: "Xóa",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteMovie(movie.id);
+              onDelete();
+            } catch (error) {
+              console.error("Error deleting movie:", error);
+              Alert.alert("Lỗi", "Không thể xóa phim. Vui lòng thử lại.");
+            }
+          }
+        }
+      ]
+    );
+  };
+
   return (
     <View
       style={{
@@ -206,7 +233,7 @@ function MovieItem({ movie, onToggle, onEdit }: { movie: Movie; onToggle: () => 
         onPress={handleToggle}
         activeOpacity={0.7}
       >
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, paddingRight: 60 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, paddingRight: 120 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
             {isWatched && (
               <Text style={{ fontSize: 20, marginRight: 8, color: '#10b981' }}>✓</Text>
@@ -238,20 +265,31 @@ function MovieItem({ movie, onToggle, onEdit }: { movie: Movie; onToggle: () => 
           )}
         </View>
       </TouchableOpacity>
-      <TouchableOpacity
-        onPress={handleEdit}
-        style={{
-          position: 'absolute',
-          top: 12,
-          right: 12,
-          paddingHorizontal: 12,
-          paddingVertical: 6,
-          borderRadius: 6,
-          backgroundColor: '#3b82f6',
-        }}
-      >
-        <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '600' }}>Sửa</Text>
-      </TouchableOpacity>
+      <View style={{ position: 'absolute', top: 12, right: 12, flexDirection: 'row' }}>
+        <TouchableOpacity
+          onPress={handleEdit}
+          style={{
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            borderRadius: 6,
+            backgroundColor: '#3b82f6',
+            marginRight: 8,
+          }}
+        >
+          <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '600' }}>Sửa</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={handleDelete}
+          style={{
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            borderRadius: 6,
+            backgroundColor: '#ef4444',
+          }}
+        >
+          <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '600' }}>Xóa</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -451,7 +489,7 @@ function AddMovieModal({
                 {errors.rating}
               </Text>
             )}
-          </View>
+                </View>
 
           {/* Buttons */}
           <View style={{ flexDirection: 'row' }}>
@@ -679,7 +717,7 @@ function EditMovieModal({
                 {errors.year}
               </Text>
             )}
-          </View>
+                </View>
 
           {/* Rating Input */}
           <View style={{ marginBottom: 24 }}>
@@ -709,7 +747,7 @@ function EditMovieModal({
                 {errors.rating}
               </Text>
             )}
-          </View>
+                </View>
 
           {/* Buttons */}
           <View style={{ flexDirection: 'row' }}>

@@ -97,6 +97,15 @@ export const updateMovie = async (
   );
 };
 
+// Xóa phim khỏi database
+export const deleteMovie = async (id: number): Promise<void> => {
+  const db = await getDatabase();
+  await db.runAsync(
+    `DELETE FROM movies WHERE id = ?`,
+    [id]
+  );
+};
+
 // Khởi tạo database (kết nối và tạo bảng)
 export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
   const db = await getDatabase();
