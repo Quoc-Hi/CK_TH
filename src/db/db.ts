@@ -106,18 +106,71 @@ export const deleteMovie = async (id: number): Promise<void> => {
   );
 };
 
+// Kiểm tra phim đã tồn tại chưa (theo title + year)
+export const movieExists = async (title: string, year: number | null): Promise<boolean> => {
+  const db = await getDatabase();
+  if (year !== null) {
+    const result = await db.getFirstAsync<{ count: number }>(
+      `SELECT COUNT(*) as count FROM movies WHERE LOWER(TRIM(title)) = LOWER(TRIM(?)) AND year = ?`,
+      [title, year]
+    );
+    return result ? result.count > 0 : false;
+  } else {
+    const result = await db.getFirstAsync<{ count: number }>(
+      `SELECT COUNT(*) as count FROM movies WHERE LOWER(TRIM(title)) = LOWER(TRIM(?)) AND year IS NULL`,
+      [title]
+    );
+    return result ? result.count > 0 : false;
+  }
+};
+
+// Import nhiều phim cùng lúc
+export const importMovies = async (
+  movies: Array<{ title: string; year: number | null; rating: number | null }>
+): Promise<{ added: number; skipped: number }> => {
+  const db = await getDatabase();
+  const currentTime = Date.now();
+  let added = 0;
+  let skipped = 0;
+
+  for (const movie of movies) {
+    const exists = await movieExists(movie.title, movie.year);
+    if (!exists) {
+      await db.runAsync(
+        `INSERT INTO movies (title, year, watched, rating, created_at) VALUES (?, ?, ?, ?, ?)`,
+        [movie.title, movie.year, 0, movie.rating, currentTime]
+      );
+      added++;
+    } else {
+      skipped++;
+    }
+  }
+
+  return { added, skipped };
+};
+
 // Khởi tạo database (kết nối và tạo bảng)
 export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
-  const db = await getDatabase();
-  await initTable(db);
-  
-  // Seed dữ liệu mẫu nếu bảng rỗng (lần đầu chạy)
-  const isEmpty = await isTableEmpty(db);
-  if (isEmpty) {
-    await seedSampleData(db);
-    console.log("Sample movies seeded successfully");
+  try {
+    const db = await getDatabase();
+    
+    if (!db) {
+      throw new Error("Failed to open database");
+    }
+    
+    await initTable(db);
+    
+    // Seed dữ liệu mẫu nếu bảng rỗng (lần đầu chạy)
+    const isEmpty = await isTableEmpty(db);
+    if (isEmpty) {
+      await seedSampleData(db);
+      console.log("Sample movies seeded successfully");
+    }
+    
+    return db;
+  } catch (error) {
+    console.error("Database initialization error:", error);
+    throw error;
   }
-  
-  return db;
 };
 

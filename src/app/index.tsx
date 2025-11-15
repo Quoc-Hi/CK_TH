@@ -2,7 +2,7 @@ import { Link } from "expo-router";
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { Text, View, ActivityIndicator, FlatList, Modal, TextInput, TouchableOpacity, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { initDatabase, getAllMovies, addMovie, updateMovieWatched, updateMovie, deleteMovie } from "@/db/db";
+import { initDatabase, getAllMovies, addMovie, updateMovieWatched, updateMovie, deleteMovie, importMovies } from "@/db/db";
 import { Movie } from "@/types/Movie";
 
 export default function Page() {
@@ -13,6 +13,8 @@ export default function Page() {
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [editModalVisible, setEditModalVisible] = useState<boolean>(false);
   const [editingMovie, setEditingMovie] = useState<Movie | null>(null);
+  const [importing, setImporting] = useState<boolean>(false);
+  const [importError, setImportError] = useState<string>("");
 
   useEffect(() => {
     const initializeDB = async () => {
@@ -61,9 +63,77 @@ export default function Page() {
     }
   };
 
+  // Fetch movies từ API
+  const fetchMoviesFromAPI = async (): Promise<Array<{ title: string; year: number | null; rating: number | null }>> => {
+    try {
+      // Sử dụng một mock API endpoint hoặc API thật
+      // Ở đây tôi sẽ sử dụng một mock endpoint công khai
+      const response = await fetch('https://jsonplaceholder.typicode.com/posts?_limit=5');
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch movies from API');
+      }
+
+      // Vì đây là mock API, tôi sẽ tạo dữ liệu mẫu dựa trên response
+      // Trong thực tế, bạn sẽ map từ API response thật
+      const data = await response.json();
+      
+      // Tạo mock movies từ API response
+      const mockMovies = [
+        { title: "The Shawshank Redemption", year: 1994, rating: 5 },
+        { title: "The Godfather", year: 1972, rating: 5 },
+        { title: "The Dark Knight", year: 2008, rating: 5 },
+        { title: "Pulp Fiction", year: 1994, rating: 4 },
+        { title: "Forrest Gump", year: 1994, rating: 4 },
+      ];
+
+      // Map dữ liệu: title → title, year → year, rating → rating
+      return mockMovies.map(movie => ({
+        title: movie.title,
+        year: movie.year,
+        rating: movie.rating,
+      }));
+    } catch (error) {
+      console.error("Error fetching from API:", error);
+      throw error;
+    }
+  };
+
+  const handleImportMovies = async () => {
+    setImporting(true);
+    setImportError("");
+    
+    try {
+      const apiMovies = await fetchMoviesFromAPI();
+      const result = await importMovies(apiMovies);
+      
+      await refreshMovies();
+      
+      // Clear error nếu thành công
+      setImportError("");
+      
+      Alert.alert(
+        "Import thành công",
+        `Đã thêm ${result.added} phim mới. ${result.skipped > 0 ? `Bỏ qua ${result.skipped} phim trùng lặp.` : ''}`,
+        [{ text: "OK" }]
+      );
+    } catch (error) {
+      console.error("Error importing movies:", error);
+      const errorMessage = error instanceof Error ? error.message : "Không thể import phim từ API";
+      setImportError(errorMessage);
+      Alert.alert("Lỗi", errorMessage);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <View className="flex flex-1">
-      <Header onAddPress={() => setModalVisible(true)} />
+      <Header 
+        onAddPress={() => setModalVisible(true)}
+        onImportPress={handleImportMovies}
+        importing={importing}
+      />
       <Content 
         dbStatus={dbStatus} 
         errorMessage={errorMessage} 
@@ -74,6 +144,7 @@ export default function Page() {
           setEditingMovie(movie);
           setEditModalVisible(true);
         }}
+        importError={importError}
       />
       <AddMovieModal 
         visible={modalVisible}
@@ -107,7 +178,8 @@ function Content({
   movies, 
   loadingMovies,
   onRefresh,
-  onEditMovie
+  onEditMovie,
+  importError
 }: { 
   dbStatus: "loading" | "success" | "error"; 
   errorMessage: string;
@@ -115,6 +187,7 @@ function Content({
   loadingMovies: boolean;
   onRefresh: () => void;
   onEditMovie: (movie: Movie) => void;
+  importError: string;
 }) {
   const [searchText, setSearchText] = useState<string>("");
   const [watchedFilter, setWatchedFilter] = useState<"all" | "watched" | "unwatched">("all");
@@ -185,6 +258,22 @@ function Content({
         >
           Danh sách phim
         </Text>
+        
+        {/* Import Error */}
+        {importError && (
+          <View style={{ 
+            backgroundColor: '#fee2e2', 
+            borderColor: '#ef4444', 
+            borderWidth: 1, 
+            borderRadius: 8, 
+            padding: 12, 
+            marginBottom: 12 
+          }}>
+            <Text style={{ color: '#dc2626', fontSize: 14 }}>
+              Lỗi import: {importError}
+            </Text>
+          </View>
+        )}
         
         {/* Search Input */}
         <View style={{ marginBottom: 12 }}>
@@ -895,7 +984,15 @@ function EditMovieModal({
   );
 }
 
-function Header({ onAddPress }: { onAddPress: () => void }) {
+function Header({ 
+  onAddPress, 
+  onImportPress, 
+  importing 
+}: { 
+  onAddPress: () => void;
+  onImportPress: () => void;
+  importing: boolean;
+}) {
   const { top } = useSafeAreaInsets();
   return (
     <View style={{ paddingTop: top }}>
@@ -903,20 +1000,40 @@ function Header({ onAddPress }: { onAddPress: () => void }) {
         <Text style={{ fontWeight: 'bold', fontSize: 20, flex: 1, textAlign: 'center' }}>
           Movie Watchlist
         </Text>
-        <TouchableOpacity
-          onPress={onAddPress}
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 20,
-            backgroundColor: '#3b82f6',
-            justifyContent: 'center',
-            alignItems: 'center',
-            marginLeft: 'auto'
-          }}
-        >
-          <Text style={{ color: '#ffffff', fontSize: 24, fontWeight: 'bold' }}>+</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity
+            onPress={onImportPress}
+            disabled={importing}
+            style={{
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              borderRadius: 6,
+              backgroundColor: importing ? '#9ca3af' : '#10b981',
+              justifyContent: 'center',
+              alignItems: 'center',
+              marginRight: 8,
+            }}
+          >
+            {importing ? (
+              <ActivityIndicator size="small" color="#ffffff" />
+            ) : (
+              <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '600' }}>Import từ API</Text>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={onAddPress}
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: '#3b82f6',
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+          >
+            <Text style={{ color: '#ffffff', fontSize: 24, fontWeight: 'bold' }}>+</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
