@@ -1,0 +1,23 @@
+EAS Build Preview Links for Movie Watchlist
+=============================================
+
+Để tạo preview build, chạy các lệnh sau:
+
+Android:
+  eas build --profile preview --platform android
+
+iOS:
+  eas build --profile preview --platform ios
+
+Sau khi build hoàn thành, link preview sẽ được hiển thị trong terminal hoặc trên Expo dashboard.
+
+Preview Links:
+--------------
+Android Preview: [Link sẽ được cập nhật sau khi build]
+iOS Preview: [Link sẽ được cập nhật sau khi build]
+
+Lưu ý: 
+- Cần đăng nhập EAS: npx eas login
+- Cần có tài khoản Expo để sử dụng EAS Build
+- Build preview thường mất 10-20 phút
+
