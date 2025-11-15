@@ -56,6 +56,21 @@ export const getAllMovies = async (): Promise<Movie[]> => {
   return movies;
 };
 
+// Thêm phim mới vào database
+export const addMovie = async (
+  title: string,
+  year: number | null,
+  rating: number | null
+): Promise<void> => {
+  const db = await getDatabase();
+  const currentTime = Date.now();
+  
+  await db.runAsync(
+    `INSERT INTO movies (title, year, watched, rating, created_at) VALUES (?, ?, ?, ?, ?)`,
+    [title, year, 0, rating, currentTime]
+  );
+};
+
 // Khởi tạo database (kết nối và tạo bảng)
 export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
   const db = await getDatabase();
