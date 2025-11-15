@@ -2,7 +2,7 @@ import { Link } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { Text, View, ActivityIndicator, FlatList, Modal, TextInput, TouchableOpacity, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { initDatabase, getAllMovies, addMovie } from "@/db/db";
+import { initDatabase, getAllMovies, addMovie, updateMovieWatched } from "@/db/db";
 import { Movie } from "@/types/Movie";
 
 export default function Page() {
@@ -67,6 +67,7 @@ export default function Page() {
         errorMessage={errorMessage} 
         movies={movies}
         loadingMovies={loadingMovies}
+        onRefresh={refreshMovies}
       />
       <AddMovieModal 
         visible={modalVisible}
@@ -85,12 +86,14 @@ function Content({
   dbStatus, 
   errorMessage, 
   movies, 
-  loadingMovies 
+  loadingMovies,
+  onRefresh
 }: { 
   dbStatus: "loading" | "success" | "error"; 
   errorMessage: string;
   movies: Movie[];
   loadingMovies: boolean;
+  onRefresh: () => void;
 }) {
   if (dbStatus === "loading") {
     return (
@@ -137,7 +140,7 @@ function Content({
         <FlatList
           data={movies}
           keyExtractor={(item) => item.id.toString()}
-          renderItem={({ item }) => <MovieItem movie={item} />}
+          renderItem={({ item }) => <MovieItem movie={item} onToggle={onRefresh} />}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16, paddingTop: 8 }}
           style={{ flex: 1 }}
           showsVerticalScrollIndicator={true}
@@ -147,26 +150,66 @@ function Content({
   );
 }
 
-function MovieItem({ movie }: { movie: Movie }) {
+function MovieItem({ movie, onToggle }: { movie: Movie; onToggle: () => void }) {
+  const isWatched = movie.watched === 1;
+
+  const handleToggle = async () => {
+    try {
+      const newWatched = isWatched ? 0 : 1;
+      await updateMovieWatched(movie.id, newWatched);
+      onToggle();
+    } catch (error) {
+      console.error("Error updating watched state:", error);
+      Alert.alert("Lỗi", "Không thể cập nhật trạng thái. Vui lòng thử lại.");
+    }
+  };
+
   return (
-    <View style={{ backgroundColor: '#ffffff', borderRadius: 8, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#e5e7eb' }}>
+    <TouchableOpacity
+      onPress={handleToggle}
+      activeOpacity={0.7}
+      style={{
+        backgroundColor: isWatched ? '#f3f4f6' : '#ffffff',
+        borderRadius: 8,
+        padding: 16,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: isWatched ? '#d1d5db' : '#e5e7eb',
+        opacity: isWatched ? 0.7 : 1,
+      }}
+    >
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-        <Text style={{ fontSize: 18, fontWeight: '600', flex: 1 }}>{movie.title}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+          {isWatched && (
+            <Text style={{ fontSize: 20, marginRight: 8, color: '#10b981' }}>✓</Text>
+          )}
+          <Text
+            style={{
+              fontSize: 18,
+              fontWeight: '600',
+              flex: 1,
+              textDecorationLine: isWatched ? 'line-through' : 'none',
+              color: isWatched ? '#6b7280' : '#111827',
+            }}
+          >
+            {movie.title}
+          </Text>
+        </View>
         {movie.year && (
           <Text style={{ color: '#6b7280', marginLeft: 8 }}>({movie.year})</Text>
         )}
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
-        <Text style={{ fontSize: 14, color: '#4b5563' }}>
-          {movie.watched === 1 ? "✓ Đã xem" : "○ Chưa xem"}
+        <Text style={{ fontSize: 14, color: isWatched ? '#6b7280' : '#4b5563' }}>
+          {isWatched ? "✓ Đã xem" : "○ Chưa xem"}
         </Text>
         {movie.rating !== null && movie.rating !== undefined && (
-          <Text style={{ fontSize: 14, color: '#4b5563', marginLeft: 16 }}>
+          <Text style={{ fontSize: 14, color: isWatched ? '#6b7280' : '#4b5563', marginLeft: 16 }}>
             ⭐ {movie.rating}/5
           </Text>
         )}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 

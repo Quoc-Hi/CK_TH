@@ -71,6 +71,18 @@ export const addMovie = async (
   );
 };
 
+// Cập nhật trạng thái watched của phim
+export const updateMovieWatched = async (
+  id: number,
+  watched: number
+): Promise<void> => {
+  const db = await getDatabase();
+  await db.runAsync(
+    `UPDATE movies SET watched = ? WHERE id = ?`,
+    [watched, id]
+  );
+};
+
 // Khởi tạo database (kết nối và tạo bảng)
 export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
   const db = await getDatabase();
